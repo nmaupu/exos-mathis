@@ -1,6 +1,6 @@
-# Plant identification tree — three implementations
+# Plant identification tree — four implementations
 
-This project implements the same small program in **three different programming languages**, each with a different style. The goal is to show how the same idea can be expressed in object-oriented, functional, and pure-functional ways.
+This project implements the same small program in **four different programming languages**, each with a different style. The goal is to show how the same idea can be expressed in object-oriented, functional, pure-functional, and interface-based ways.
 
 ## What the program does
 
@@ -28,7 +28,7 @@ The program does two things:
 1. **Counts** the total number of plants stored in the leaves (`nb`).
 2. **Lists** all the questions in the tree (`liste_question`).
 
-Expected output for all three versions:
+Expected output for all four versions:
 ```
 3
 simple
@@ -163,21 +163,82 @@ Compiling creates `Main`, `Main.hi`, and `Main.o`. To clean up: `rm Main Main.hi
 
 ---
 
-## Comparing the three styles
+## 4. Go — interface-based style (`main.go`)
 
-| Aspect              | Python (OO)              | Scheme (functional)            | Haskell (pure functional)       |
-|---------------------|--------------------------|--------------------------------|---------------------------------|
-| Data representation | Two classes              | Tagged lists                   | One algebraic data type         |
-| How variants differ | Different classes        | Different tag symbols          | Different constructors          |
-| Logic dispatch      | Method on the class      | `match` on the data shape      | Pattern matching on constructor |
-| Type checking       | At runtime               | At runtime                     | At compile time                 |
-| Mutation allowed    | Yes (but unused here)    | Avoided                        | Forbidden by default            |
+Go is a **statically-typed, compiled** language designed at Google. It does not have classes the way Python does, but it has **structs** (groups of fields) and **interfaces** (sets of method signatures). This combination is Go's way of doing polymorphism.
+
+```go
+type Arbre interface {
+    EstResultat() bool
+    Nb() int
+    ListeQuestion() []string
+}
+
+type Noeud struct {
+    Question string
+    SiOui    Arbre
+    SiNon    Arbre
+}
+
+func (n Noeud) EstResultat() bool { return false }
+func (n Noeud) Nb() int           { return n.SiOui.Nb() + n.SiNon.Nb() }
+func (n Noeud) ListeQuestion() []string {
+    return append([]string{n.Question},
+        append(n.SiOui.ListeQuestion(), n.SiNon.ListeQuestion()...)...)
+}
+
+type Feuille struct {
+    Vegetaux []string
+}
+
+func (f Feuille) EstResultat() bool      { return true }
+func (f Feuille) Nb() int                { return len(f.Vegetaux) }
+func (f Feuille) ListeQuestion() []string { return []string{} }
+```
+
+### Key ideas
+
+- **The `Arbre` interface** lists the three methods every tree node must provide: `EstResultat`, `Nb`, and `ListeQuestion`. It says *what* you can do with an `Arbre`, but not *how* — that's left to each concrete type.
+- **Two structs**, `Noeud` and `Feuille`, each carrying their own data. They both **satisfy the `Arbre` interface** simply because they implement the three required methods. Unlike Java or C#, you don't write `implements Arbre` anywhere — Go figures it out automatically. This is called **structural typing**.
+- **`EstResultat` is the perfect example** of the requested split: `Noeud.EstResultat()` returns `false`, `Feuille.EstResultat()` returns `true`. Same method name, different behavior depending on the concrete type.
+- **The `SiOui` and `SiNon` fields are typed `Arbre`** (the interface), so a `Noeud` can hold either kind of child. At runtime, when you call `n.SiOui.Nb()`, Go looks at what's actually stored there (a `Noeud` or a `Feuille`) and runs the matching method. This is **dynamic dispatch through an interface**.
+- **Method receivers** like `func (n Noeud) Nb() int` mean "this is a method on the `Noeud` type, where `n` plays the same role as `self` in Python or `this` in Java".
+- **The `...` in `append(..., slice...)`** is the *spread operator*: it tells `append` to add each element of the slice individually instead of the slice as a whole.
+
+### Running it
+
+```bash
+go run main.go
+```
+
+Or compile to a binary:
+
+```bash
+go build -o exo
+./exo
+```
+
+---
+
+## Comparing the four styles
+
+| Aspect              | Python (OO)              | Scheme (functional)            | Haskell (pure functional)       | Go (interface)                  |
+|---------------------|--------------------------|--------------------------------|---------------------------------|---------------------------------|
+| Data representation | Two classes              | Tagged lists                   | One algebraic data type         | Two structs + interface         |
+| How variants differ | Different classes        | Different tag symbols          | Different constructors          | Different structs               |
+| Logic dispatch      | Method on the class      | `match` on the data shape      | Pattern matching on constructor | Method via interface            |
+| Type checking       | At runtime               | At runtime                     | At compile time                 | At compile time                 |
+| Mutation allowed    | Yes (but unused here)    | Avoided                        | Forbidden by default            | Yes (but unused here)           |
+| Variants are open   | Yes (any new class)      | Yes (any new tag)              | No (closed: must edit the ADT)  | Yes (any new struct)            |
+
+The last row matters: with Haskell's algebraic data type, all the variants are listed in one place, and the compiler forces you to handle every case. With classes (Python), tagged lists (Scheme), or interfaces (Go), anyone can add a new variant later — more flexible, but the compiler can no longer warn you if you forget to handle it somewhere.
 
 ### What to take away
 
-- **The same problem can be modeled many ways.** OO ties data and behavior together inside a class. Functional separates data (tags or ADTs) from the functions that work on it.
+- **The same problem can be modeled many ways.** OO ties data and behavior together inside a class. Functional separates data (tags or ADTs) from the functions that work on it. Go's interfaces sit in between: structs hold the data, methods provide the behavior, and the interface is just a contract.
 - **Pattern matching** (`match` in Scheme, equation-based in Haskell) is often clearer than chains of `if`/`else`. It lets the *shape* of the data drive the logic.
-- **Static typing** (Haskell) catches a whole class of bugs before you ever run the program — at the cost of having to be more precise upfront.
+- **Polymorphism** shows up under different names: method dispatch (Python), pattern matching (Scheme/Haskell), interface satisfaction (Go). The underlying idea is the same — *the same call name does different things depending on the kind of value*.
+- **Static typing** (Haskell, Go) catches a whole class of bugs before you ever run the program — at the cost of having to be more precise upfront.
 - **Recursion** appears in every version. It's the natural way to process tree-shaped data: handle a leaf directly, and combine the results of recursing on the children.
 
 Each style has its strengths. Knowing more than one helps you pick the right tool — and, more importantly, it changes how you *think* about a problem.
