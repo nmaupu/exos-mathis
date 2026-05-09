@@ -72,6 +72,72 @@ class Feuille:
 - **Each class has its own version of `nb()` and `liste_question()`.** When you call `something.nb()`, Python looks at *which class* the object belongs to and runs the matching method. This is called **polymorphism**.
 - **Recursion**: `Noeud.nb()` calls `nb()` on its two children. The recursion stops at `Feuille`, which doesn't recurse — it just returns the length of its plant list.
 
+### Why Python's OO is "loose" compared to real OO languages
+
+Python *looks* like an object-oriented language, but compared to Java, C#, or even Go, its OO support is surprisingly informal. Three concrete weaknesses show up in this very example:
+
+#### 1. No real interfaces — polymorphism is "duck-typed"
+
+In Java or Go, you would declare an interface like `Arbre` listing the methods any tree must provide, and the compiler would refuse to build the program if `Noeud` or `Feuille` forgot one. In Python, **nothing** plays that role. The line
+
+```python
+return self.sioui.nb() + self.sinon.nb()
+```
+
+works only because `self.sioui` *happens* to have a method called `nb`. This is called **duck typing**: "if it walks like a duck and quacks like a duck, it's a duck". The downsides:
+
+- **Nothing prevents you from passing the wrong thing.** `Noeud("?", "hello", 42)` is accepted at construction. The crash happens later, deep in the recursion, when Python tries `"hello".nb()` and fails with `AttributeError`.
+- **No common contract.** If you decide tomorrow that every tree must have a `description()` method, there's no place to declare that requirement. You have to remember to add it to both classes — and hope you didn't miss any other class somewhere.
+- **Tooling can only guess.** Editors and linters have no formal contract to check against. They use heuristics and often miss errors that a real compiler would catch instantly.
+
+Python *does* offer `abc.ABC` and `typing.Protocol` to simulate interfaces, but they're **opt-in** and most checks still happen at runtime, when the program is already running. Compare to Go, where the `Arbre` interface is checked at compile time, before the program even starts.
+
+#### 2. The `self` clutter
+
+Look at how often `self` appears in the Python code:
+
+```python
+def __init__(self, question, sioui, sinon):
+    self.question = question
+    self.sioui = sioui
+    self.sinon = sinon
+```
+
+Five `self`s in three lines. In Java or C#, this would simply be:
+
+```java
+this.question = question;  // or even just: question = question (with field shadowing)
+```
+
+and `this` is implicit when you call your own methods. In Go, the receiver is named once at the top of each method and that's it. Python forces you to:
+
+- pass `self` as the **first parameter** of *every* method (yes, you write it every time),
+- prefix **every** field access and **every** method call with `self.`.
+
+For a small class it's manageable, but in larger code it adds visual noise that obscures the actual logic. Many people see `self` as a leaked implementation detail of how Python turns `obj.method(args)` into `Class.method(obj, args)` under the hood.
+
+#### 3. Private fields don't really exist
+
+In Java, C#, or C++, you can mark a field `private` and the compiler **forbids** anyone outside the class from reading or modifying it. This is called **encapsulation** and it's one of the pillars of OO. Python has nothing equivalent:
+
+- A leading underscore (`self._question`) is **purely a convention** — a polite "please don't touch this". The interpreter does not stop you. Anyone can still write `mon_noeud._question = "haha"` and it will work.
+- A double underscore (`self.__question`) triggers **name mangling**: Python rewrites the attribute as `_ClassName__question`. This makes accidental access from a child class harder, but it's not protection — it's obfuscation. You can still write `mon_noeud._Noeud__question` and read or modify it freely.
+
+So in our example, even if we wanted to make `question`, `sioui`, and `sinon` immutable internals of `Noeud`, **we can't**. Anyone can reach in from outside and rewire the tree. In Java or Go, these fields could be truly hidden behind a constructor and read-only accessors, and the compiler would enforce it.
+
+#### Summary
+
+Python's OO is more like a **toolkit of conventions** than a strict system. It's flexible and quick to write, but you trade away guarantees:
+
+| Feature                 | Java / C# / Go      | Python                          |
+|-------------------------|---------------------|---------------------------------|
+| Interface contract      | Enforced by compiler| None (or opt-in, runtime-only)  |
+| `this` / receiver       | Implicit            | Explicit `self` everywhere      |
+| Private fields          | Enforced by compiler| Convention only                 |
+| Wrong type detection    | At compile time     | At runtime, when it crashes     |
+
+This isn't a flaw exactly — it's a deliberate design choice ("we trust the programmer"). But it's the reason many people say Python is *not* a strongly object-oriented language, just a language that *supports* objects.
+
 ### Running it
 
 ```bash
